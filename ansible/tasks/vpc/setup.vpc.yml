@@ -1,0 +1,55 @@
+# ---
+# VPCの作成、サブネットの定義・設定、セキュリティグループの設定
+
+# Ansible の ec2_vpc_net module を用いてVPCを作成する
+- name: create VPC
+  ec2_vpc_net:
+    name: "{{ vpc_name }}"
+    cidr_block: "{{ vpc_cidr_block }}"
+    region: "{{ aws_region }}"
+  register: create_vpc
+
+# VPCを作成した結果から、VPC ID をパースして取得する(set_factモジュール使用)
+- name: "set fact: VPC ID"
+  set_fact:
+    vpc_id: "{{ create_vpc.vpc.id }}"
+
+# VPCサブネットを繰り返し作成
+- name: create VPC subnets
+  ec2_vpc_subnet:
+    vpc_id: "{{ vpc_id }}"
+    cidr: "{{ item.value.cidr }}"
+    az: "{{ item.value.az }}"
+    tags:
+      Name: "{{ item.key }}"
+  with_dict: "{{ vpc_subnets }}"
+  register: create_vpc_subnets
+
+# 作成した各サブネットの配列を元に、それぞれのサブネットIDを定義
+# "name: id"を定義するためにvpc_subnet_idsを参照、見つからなければ別途補完
+- name: "set fact: VPC subnet IDs"
+  set_fact:
+    vpc_subnet_ids: "{{ vpc_subnet_ids | default({}) | combine({ item.subnet.tags.Name: item.subnet.id }) }}"
+  with_items: "{{ create_vpc_subnets.results }}"
+
+# vpc_security_groupsを参照しセキュリティグループを設定
+- name: create VPC security groups
+  ec2_group:
+    name: "{{ item.name }}"
+    description: "{{ item.description }}"
+    vpc_id: "{{ vpc_id }}"
+    rules: "{{ item.rules }}"
+  with_items: "{{ vpc_security_groups }}"
+
+# EC2 key を作成
+- name: create EC2 key
+  ec2_key:
+    name: "{{ vpc_key }}"
+
+# Route53 を用いて、Private DNS を起動
+- name: create Route 53 private hosted zone
+  route53_zone:
+    zone: "{{ vpc_dns_zone }}"
+    state: present
+    vpc_id: "{{ vpc_id }}"
+    vpc_region: "{{ aws_region }}"

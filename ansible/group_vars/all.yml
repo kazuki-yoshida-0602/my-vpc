@@ -1,0 +1,4 @@
+# ---
+
+# リモートではなくローカルでAnsibleを走らせる
+ansible_connection: local

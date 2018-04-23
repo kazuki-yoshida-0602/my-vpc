@@ -1,0 +1,2 @@
+# Ansible Vault の秘密鍵をGit管理から除外
+/encrypt_pass.txt
